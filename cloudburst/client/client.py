@@ -81,6 +81,7 @@ class CloudburstConnection():
 
         self.dag_create_sock = self.context.socket(zmq.REQ)
         self.dag_create_sock.connect(self.service_addr % DAG_CREATE_PORT)
+        self.dag_create_sock.setsockopt(zmq.RCVTIMEO, 100000)
 
         self.dag_call_sock = self.context.socket(zmq.REQ)
         self.dag_call_sock.connect(self.service_addr % DAG_CALL_PORT)
@@ -90,7 +91,7 @@ class CloudburstConnection():
 
         self.response_sock = self.context.socket(zmq.PULL)
         response_port = 9000 + tid
-        self.response_sock.setsockopt(zmq.RCVTIMEO, 1000)
+        self.response_sock.setsockopt(zmq.RCVTIMEO, 10000)
         self.response_sock.bind('tcp://*:' + str(response_port))
 
         self.response_address = 'tcp://' + ip + ':' + str(response_port)

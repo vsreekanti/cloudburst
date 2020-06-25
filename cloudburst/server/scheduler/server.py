@@ -115,6 +115,7 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
     list_socket.bind(sutils.BIND_ADDR_TEMPLATE % (LIST_PORT))
 
     exec_status_socket = context.socket(zmq.PULL)
+    exec_status_socket.setsockopt(zmq.RCVHWM, 55)
     exec_status_socket.bind(sutils.BIND_ADDR_TEMPLATE % (sutils.STATUS_PORT))
 
     sched_update_socket = context.socket(zmq.PULL)

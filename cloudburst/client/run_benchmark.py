@@ -59,7 +59,7 @@ elif bname == 'locality':
                                                   False, None)
 elif bname == 'mobilenet':
     total, scheduler, kvs, retries = mobilenet.run(cloudburst_client, num_requests,
-                                                   None)
+                                                   True, None)
 elif bname == 'pred_serving':
     total, scheduler, kvs, retries = predserving.run(cloudburst_client,
                                                      num_requests, None)

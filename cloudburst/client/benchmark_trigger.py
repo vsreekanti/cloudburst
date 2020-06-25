@@ -49,12 +49,20 @@ if 'create' in msg:
     sent_msgs += 1
 else:
     for ip in ips:
+        brk = False
         for tid in range(NUM_THREADS):
             sckt = ctx.socket(zmq.PUSH)
             sckt.connect('tcp://' + ip + ':' + str(3000 + tid))
 
             sckt.send_string(msg)
             sent_msgs += 1
+
+            if sent_msgs == int(sys.argv[2]):
+                brk = True
+                break
+
+        if brk:
+            break
 
 epoch_total = []
 total = []
@@ -65,6 +73,7 @@ epoch = 1
 epoch_thruput = 0
 epoch_start = time.time()
 
+bench_start = time.time()
 while end_recv < sent_msgs:
     msg = recv_socket.recv()
 
@@ -82,6 +91,7 @@ while end_recv < sent_msgs:
         epoch_total += new_tot
         total += new_tot
         epoch_recv += 1
+        print(f'len is {len(total)}')
 
         if epoch_recv == sent_msgs:
             epoch_end = time.time()
@@ -98,7 +108,8 @@ while end_recv < sent_msgs:
             epoch_start = time.time()
             epoch += 1
 
+bench_end = time.time()
 logging.info('*** END ***')
 
 if len(total) > 0:
-    utils.print_latency_stats(total, 'E2E', True)
+    utils.print_latency_stats(total, 'E2E', True, bench_end-bench_start)

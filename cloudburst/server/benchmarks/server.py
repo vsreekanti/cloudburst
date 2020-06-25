@@ -78,7 +78,7 @@ def run_bench(bname, num_requests, cloudburst, kvs, sckt, create=False):
                                                          sckt)
     elif bname == 'mobilenet':
         total, scheduler, kvs, retries = mobilenet.run(cloudburst, num_requests,
-                                                       sckt)
+                                                       create, sckt)
     elif bname == 'scaling':
         total, scheduler, kvs, retries = scaling.run(cloudburst, num_requests,
                                                      sckt, create)

@@ -122,10 +122,6 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
                 if ip in candidate_nodes:
                     return ip, tid
 
-        for executor in self.backoff:
-            if len(executors) > 1:
-                executors.discard(executor)
-
         # Shortcut policies -- if neither of these are activated, we go to the
         # default backoff and locality policy.
         if function_name:
@@ -136,6 +132,9 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
                 self.function_locations[function_name].append(executor)
                 return executor
 
+        for executor in self.backoff:
+            if len(executors) > 1:
+                executors.remove(executor)
 
         # Generate a list of all the keys in the system; if any of these nodes
         # have received many requests, we remove them from the executor set
@@ -144,7 +143,7 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
            if (len(self.running_counts[key]) > 1000 and sys_random.random() >
                    self.random_threshold):
                 if len(executors) > 1:
-                    executors.discard(key)
+                    executors.remove(key)
 
         if len(executors) == 0:
             logging.error('No available executors.')
@@ -374,7 +373,7 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
         if key in self.thread_statuses and self.thread_statuses[key] != status:
             for function_name in self.thread_statuses[key].functions:
                 if function_name in self.function_locations:
-                    self.function_locations[function_name].discard(key)
+                    self.function_locations[function_name].remove(key)
 
         self.thread_statuses[key] = status
         for function_name in status.functions:
