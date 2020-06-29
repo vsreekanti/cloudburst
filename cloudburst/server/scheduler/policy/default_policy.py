@@ -14,6 +14,7 @@
 
 import logging
 import random
+import sys
 import time
 
 import zmq
@@ -96,9 +97,13 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
         # Indicates if we are running in local mode
         self.local = local
 
+        self.finished = False
+        self.choices_index = {}
+        self.my_choices = {}
 
-    def pick_executor(self, references, function_name=None, colocated=[],
-                      schedule=None):
+
+    def pick_executor(self, references, schedulers, function_name=None,
+                      colocated=[], schedule=None):
         # Construct a map which maps from IP addresses to the number of
         # relevant arguments they have cached. For the time begin, we will
         # just pick the machine that has the most number of keys cached.
@@ -125,11 +130,13 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
         # Shortcut policies -- if neither of these are activated, we go to the
         # default backoff and locality policy.
         if function_name:
+            choices = self.my_choices[function_name]
             if self.policy == 'random':
-                return random.choice(self.function_locations[function_name])
+                return random.choice(choices)
             if self.policy == 'round-robin':
-                executor = self.function_locations[function_name].pop(0)
-                self.function_locations[function_name].append(executor)
+                # logging.info(f'There are {len(choices)} choices for {function_name}')
+                self.choices_index[function_name] = (self.choices_index[function_name] + 1) % (len(choices))
+                executor = choices[self.choices_index[function_name]]
                 return executor
 
         for executor in self.backoff:
@@ -147,7 +154,6 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
 
         if len(executors) == 0:
             logging.error('No available executors.')
-            return None
 
         executor_ips = set([e[0] for e in executors])
 
@@ -218,6 +224,9 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
             # If this is not a GPU function, just look at all of the unpinned
             # executors.
             candidates = set(self.unpinned_cpu_executors)
+            for fn, thread in self.pending_dags[dag_name]:
+                if fn == function_ref.name:
+                    ip = thread[0]
         else:
             candidates = set()
 
@@ -340,10 +349,54 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
             sckt = self.pusher_cache.get(get_unpin_address(ip, tid))
             sckt.send_string(function_name)
 
-    def process_status(self, status):
+    def process_status(self, status, schedulers):
         key = (status.ip, status.tid)
         logging.info('Received status update from executor %s:%d.' %
                      (key[0], int(key[1])))
+
+        if self.finished:
+            return
+
+        if len(self.function_locations) == 3:
+            found_all = []
+            for fn in self.function_locations:
+                logging.info(f'fn is {fn}')
+                logging.info(f'there are {len(self.function_locations[fn])}')
+                if len(self.function_locations[fn]) == 53:
+                    logging.info(f'it is in my choices: {fn in self.my_choices}')
+                    found_all.append(True)
+                    if fn in self.my_choices:
+                        continue
+
+                    self.function_locations[fn] = sorted(self.function_locations[fn])
+
+                    schedulers = sorted(schedulers)
+                    my_idx = 0
+                    for idx, scheduler in enumerate(schedulers):
+                        if scheduler == self.ip:
+                            my_idx = idx
+                            break
+
+                    logging.info(f'my_idx is {my_idx}')
+                    if my_idx == 0:
+                        choices = self.function_locations[fn][:18]
+                    elif my_idx == 1:
+                        choices = self.function_locations[fn][18:36]
+                    else:
+                        choices = self.function_locations[fn][36:]
+                    self.my_choices[fn] = choices
+                    self.choices_index[fn] = 0
+                    logging.info(f'My choices are for {fn} are {choices}')
+                    print(f'Sealed {fn}')
+                    print(f'choices are {choices}')
+                else:
+                    found_all.append(False)
+
+            logging.info(f'found all is {found_all}')
+            if all(found_all):
+                logging.info('Marking finished as true!')
+                self.finished = True
+                return
 
         # This means that this node is currently departing, so we remove it
         # from all of our metadata tracking.
@@ -407,6 +460,8 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
 
             self.running_counts[executor] = new_set
 
+        # for fn in self.function_locations:
+        #     logging.info(f'For {fn}, I know about {len(self.function_locations[fn])} threads')
         # Clean up any backoff messages that were added more than 5 seconds ago
         # -- this should be enough to drain a queue.
         remove_set = set()
@@ -449,4 +504,5 @@ class DefaultCloudburstSchedulerPolicy(BaseCloudburstSchedulerPolicy):
                 self.function_locations[function_name] = []
 
             key = (location.ip, location.tid)
-            self.function_locations[function_name].append(key)
+            if key not in self.function_locations[function_name]:
+                self.function_locations[function_name].append(key)

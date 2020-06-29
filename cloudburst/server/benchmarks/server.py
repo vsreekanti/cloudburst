@@ -13,6 +13,8 @@
 #  limitations under the License.
 
 import logging
+import os
+import random
 import sys
 
 import zmq
@@ -28,6 +30,7 @@ from cloudburst.server.benchmarks import (
     utils
 )
 import cloudburst.server.utils as sutils
+from cloudburst.shared.proto.shared_pb2 import StringSet
 
 BENCHMARK_START_PORT = 3000
 
@@ -35,9 +38,27 @@ logging.basicConfig(filename='log_benchmark.txt', level=logging.INFO,
                     format='%(asctime)s %(message)s')
 
 def benchmark(ip, cloudburst_address, tid):
-    cloudburst = CloudburstConnection(cloudburst_address, ip, tid)
-
     ctx = zmq.Context(1)
+    mgmt_ip = os.getenv('MGMT_IP')
+    sckt = ctx.socket(zmq.REQ)
+    sckt.connect('tcp://' + mgmt_ip + ':7004')
+    logging.info(f'mgmt_ip is {mgmt_ip}')
+
+    sckt.send(b'')
+    bts = sckt.recv()
+    schedulers = StringSet()
+
+    schedulers.ParseFromString(bts)
+    schedulers = sorted(list(schedulers.keys))
+    logging.info(f'Schedulers is {schedulers}')
+    if tid < 3:
+        scheduler_ip = schedulers[tid]
+    else:
+        scheduler_ip = random.choice(schedulers)
+    logging.info(f'Picked {scheduler_ip}')
+
+    cloudburst = CloudburstConnection(scheduler_ip, ip, tid)
+
 
     benchmark_start_socket = ctx.socket(zmq.PULL)
     benchmark_start_socket.bind('tcp://*:' + str(BENCHMARK_START_PORT + tid))

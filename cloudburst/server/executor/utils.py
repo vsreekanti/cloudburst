@@ -88,7 +88,7 @@ def retrieve_function(name, kvs, user_library, consistency=NORMAL):
 def push_status(schedulers, pusher_cache, status):
     msg = status.SerializeToString()
 
-    # tell all the schedulers your new status
+    # Tell all the schedulers your new status.
     for sched in schedulers:
         sckt = pusher_cache.get(get_status_address(sched))
         sckt.send(msg)

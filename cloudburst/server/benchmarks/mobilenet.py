@@ -95,6 +95,7 @@ def run(cloudburst_client, num_requests, create, sckt):
                   + 'functions.')
         else:
             sys.exit(1)
+        time.sleep(1)
 
         ''' TEST REGISTERED FUNCTIONS '''
         arr = np.random.randn(1, 224, 224, 3)

@@ -133,12 +133,12 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
 
     if not local:
         management_request_socket = context.socket(zmq.REQ)
-        management_request_socket.setsockopt(zmq.RCVTIMEO, 500)
+        # management_request_socket.setsockopt(zmq.RCVTIMEO, 1000)
         # By setting this flag, zmq matches replies with requests.
-        management_request_socket.setsockopt(zmq.REQ_CORRELATE, 1)
+        # management_request_socket.setsockopt(zmq.REQ_CORRELATE, 1)
         # Relax strict alternation between request and reply.
         # For detailed explanation, see here: http://api.zeromq.org/4-1:zmq-setsockopt
-        management_request_socket.setsockopt(zmq.REQ_RELAXED, 1)
+        # management_request_socket.setsockopt(zmq.REQ_RELAXED, 1)
         management_request_socket.connect(sched_utils.get_scheduler_list_address(mgmt_ip))
 
     pusher_cache = SocketCache(context, zmq.PUSH)
@@ -154,6 +154,13 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
     poller.register(exec_status_socket, zmq.POLLIN)
     poller.register(sched_update_socket, zmq.POLLIN)
     poller.register(continuation_socket, zmq.POLLIN)
+
+    latest_schedulers = sched_utils.get_ip_set(management_request_socket, False)
+    while not latest_schedulers:
+        logging.info('Looping on schedulers...')
+        time.sleep(.010)
+        latest_schedulers = sched_utils.get_ip_set(management_request_socket, False)
+    schedulers = latest_schedulers
 
     # Start the policy engine.
     policy = DefaultCloudburstSchedulerPolicy(pin_accept_socket, pusher_cache,
@@ -208,7 +215,7 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
             for fname in dag[0].functions:
                 call_frequency[fname.name] += 1
 
-            response = call_dag(call, pusher_cache, dags, policy)
+            response = call_dag(call, pusher_cache, dags, policy, schedulers)
             dag_call_socket.send(response.SerializeToString())
 
         if (dag_delete_socket in socks and socks[dag_delete_socket] ==
@@ -229,7 +236,7 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
             status = ThreadStatus()
             status.ParseFromString(exec_status_socket.recv())
 
-            policy.process_status(status)
+            policy.process_status(status, schedulers)
 
         if sched_update_socket in socks and socks[sched_update_socket] == \
                 zmq.POLLIN:
@@ -252,7 +259,7 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
                         if fname.name not in call_frequency:
                             call_frequency[fname.name] = 0
 
-            policy.update_function_locations(status.function_locations)
+            # policy.update_function_locations(status.function_locations)
 
         if continuation_socket in socks and socks[continuation_socket] == \
                 zmq.POLLIN:
@@ -269,7 +276,7 @@ def scheduler(ip, mgmt_ip, route_addr, policy_type):
             for source in sources:
                 call.function_args[source].values.extend([result])
 
-            call_dag(call, pusher_cache, dags, policy, continuation.id)
+            call_dag(call, pusher_cache, dags, policy, schedulers, continuation.id)
 
             for fname in dag.functions:
                 call_frequency[fname.name] += 1

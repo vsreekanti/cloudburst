@@ -45,7 +45,7 @@ def call_function(func_call_socket, pusher_cache, policy):
     refs = list(filter(lambda arg: type(arg) == CloudburstReference,
                        map(lambda arg: serializer.load(arg),
                            call.arguments.values)))
-    result = policy.pick_executor(refs)
+    result = policy.pick_executor(refs, [])
 
     response = GenericResponse()
     if result is None:
@@ -65,7 +65,7 @@ def call_function(func_call_socket, pusher_cache, policy):
     func_call_socket.send(response.SerializeToString())
 
 
-def call_dag(call, pusher_cache, dags, policy, request_id=None):
+def call_dag(call, pusher_cache, dags, policy, schedulers, request_id=None):
     dag, sources = dags[call.name]
 
     schedule = DagSchedule()
@@ -110,7 +110,7 @@ def call_dag(call, pusher_cache, dags, policy, request_id=None):
         if fref.name in dag.colocated:
             colocated = list(dag.colocated, colocated, schedule)
 
-        result = policy.pick_executor(refs, fref.name, colocated, schedule)
+        result = policy.pick_executor(refs, schedulers, fref.name, colocated, schedule)
         if result is None:
             response = GenericResponse()
             response.success = False
